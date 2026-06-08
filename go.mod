@@ -1,4 +1,4 @@
-module github.com/firman/findcamera
+module github.com/sphinxid/findcamera
 
 go 1.26.3
 

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/firman/findcamera/internal/onvif"
+	"github.com/sphinxid/findcamera/internal/onvif"
 )
 
 const nullPassword = "<NULL>"

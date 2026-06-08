@@ -6,7 +6,7 @@ A CLI tool that scans a local network for ONVIF-capable IP cameras and NVRs.
 
 > **This tool is intended for educational and research purposes only.**
 >
-> Only use `findcamera` on networks and devices you own or have been explicitly authorised to test. Scanning, probing, or attempting to authenticate against devices without the owner's permission may violate local laws and regulations — including but not limited to the Computer Fraud and Abuse Act (CFAA), the UK Computer Misuse Act, and equivalent legislation in your jurisdiction.
+> Only use `findcamera` on networks and devices you own or have been explicitly authorised to test. Scanning, probing, or attempting to authenticate against devices without the owner's permission may violate local laws and regulations.
 >
 > The authors accept no responsibility for any misuse of this tool or any damage, legal consequences, or policy violations that may result from its use.
 

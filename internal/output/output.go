@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/firman/findcamera/internal/onvif"
+	"github.com/sphinxid/findcamera/internal/onvif"
 )
 
 const divider = "════════════════════════════════════════════════════════════════════════════════"
