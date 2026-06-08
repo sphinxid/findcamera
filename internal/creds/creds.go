@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/firman/findcamera/internal/onvif"
 )
@@ -93,4 +94,85 @@ func ToCredsList(entries []Entry) []onvif.Credentials {
 		list = append(list, onvif.Credentials{Username: e.Username, Password: e.Password})
 	}
 	return list
+}
+
+// ------------------------------------------------------------------
+// Cache — thread-safe working-credential cache keyed by brand+model
+// ------------------------------------------------------------------
+
+// Cache stores the credential that successfully authenticated a given
+// brand+model combination so future devices of the same type can try
+// it first before falling back to the full list.
+type Cache struct {
+	mu    sync.RWMutex
+	store map[string]onvif.Credentials // key = normalised "brand|model"
+}
+
+// NewCache returns an initialised Cache.
+func NewCache() *Cache {
+	return &Cache{store: make(map[string]onvif.Credentials)}
+}
+
+// cacheKey builds a normalised lookup key from brand and model.
+// Both are lower-cased and trimmed; empty values become "*".
+func cacheKey(brand, model string) string {
+	b := strings.ToLower(strings.TrimSpace(brand))
+	m := strings.ToLower(strings.TrimSpace(model))
+	if b == "" {
+		b = "*"
+	}
+	if m == "" {
+		m = "*"
+	}
+	return b + "|" + m
+}
+
+// Put records a successful credential for a brand+model pair.
+// A no-auth credential (empty username) is not cached — it adds no value.
+func (c *Cache) Put(brand, model string, cr onvif.Credentials) {
+	if cr.Username == "" {
+		return
+	}
+	key := cacheKey(brand, model)
+	c.mu.Lock()
+	c.store[key] = cr
+	c.mu.Unlock()
+}
+
+// Get returns the cached credential for brand+model and whether it exists.
+func (c *Cache) Get(brand, model string) (onvif.Credentials, bool) {
+	key := cacheKey(brand, model)
+	c.mu.RLock()
+	cr, ok := c.store[key]
+	c.mu.RUnlock()
+	return cr, ok
+}
+
+// Prioritise returns a credential list with the cached credential moved to
+// the front (right after the no-auth sentinel), if one exists for brand+model.
+// The rest of baseList follows without duplicating the cached entry.
+func (c *Cache) Prioritise(brand, model string, baseList []onvif.Credentials) []onvif.Credentials {
+	cached, ok := c.Get(brand, model)
+	if !ok {
+		return baseList
+	}
+	// Build: [no-auth, cached, ...rest without cached duplicate]
+	result := make([]onvif.Credentials, 0, len(baseList)+1)
+	for _, cr := range baseList {
+		if cr.Username == "" {
+			result = append(result, cr) // keep no-auth sentinel at front
+			break
+		}
+	}
+	result = append(result, cached)
+	for _, cr := range baseList {
+		if cr.Username == cached.Username && cr.Password == cached.Password {
+			continue // already added
+		}
+		if cr.Username == "" {
+			continue // already added
+		}
+		result = append(result, cr)
+	}
+	return result
 }

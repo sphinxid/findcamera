@@ -102,13 +102,14 @@ func run(_ *cobra.Command, _ []string) error {
 		flagNoPorts = true
 	}
 
-	// Build the credential list to try for authenticated devices.
-	// If --username is given explicitly, only use that single credential.
-	// Otherwise load the CSV file (silently skip if missing).
+	// Build the base credential list.
+	// If --username is given explicitly, ONLY use that credential (+ no-auth).
+	// The default.csv is NOT loaded in this case.
 	var credsList []onvif.Credentials
 	if flagUsername != "" {
+		logf("Using explicit credential: username=%q\n", flagUsername)
 		credsList = []onvif.Credentials{
-			{Username: "", Password: ""},             // try open first
+			{Username: "", Password: ""},
 			{Username: flagUsername, Password: flagPassword},
 		}
 	} else {
@@ -119,6 +120,7 @@ func run(_ *cobra.Command, _ []string) error {
 			} else {
 				logf("Creds file %q not found; will probe without authentication.\n", flagCredsFile)
 			}
+			entries = nil
 		} else {
 			logf("Loaded %d credential(s) from %s.\n", len(entries), flagCredsFile)
 		}
@@ -215,6 +217,10 @@ func run(_ *cobra.Command, _ []string) error {
 
 	logf("\nProbing %d candidate endpoint(s)…\n\n", len(pending))
 
+	// credCache holds the credential that worked for a given brand+model,
+	// so devices of the same type discovered later try it first.
+	credCache := creds.NewCache()
+
 	// ── ONVIF probing ─────────────────────────────────────────────
 	probeCh := make(chan urlSource, len(pending))
 	devCh := make(chan *onvif.DeviceInfo, len(pending))
@@ -224,7 +230,23 @@ func run(_ *cobra.Command, _ []string) error {
 		go func() {
 			for u := range probeCh {
 				logf("  Probing %s …\n", u.url)
-				info, err := onvif.ProbeURLWithFallback(u.url, credsList)
+
+				// Step 1: try a quick unauthenticated GetDeviceInformation to
+				// learn brand+model before committing to the full credential list.
+				// This succeeds on open devices and on cameras that return device
+				// info even without auth (common). On failure we skip to step 2.
+				brand, model := quickGetBrandModel(u.url)
+
+				// Step 2: build per-device credential list, promoting any cached
+				// credential for this brand+model to the front.
+				deviceCredsList := credCache.Prioritise(brand, model, credsList)
+				if brand != "" && model != "" {
+					if cached, ok := credCache.Get(brand, model); ok {
+						logf("    Cache hit for %q %q → trying %q first\n", brand, model, cached.Username)
+					}
+				}
+
+				info, err := onvif.ProbeURLWithFallback(u.url, deviceCredsList)
 				if err != nil {
 					if err == onvif.ErrAuthRequired {
 						logf("    Auth required but no credential matched: %s\n", u.url)
@@ -234,9 +256,14 @@ func run(_ *cobra.Command, _ []string) error {
 					devCh <- nil
 					continue
 				}
+
+				// Step 3: record the working credential in the cache.
 				if info.AuthUsername != "" {
 					logf("    Authenticated as %q\n", info.AuthUsername)
+					credCache.Put(info.Manufacturer, info.Model,
+						onvif.Credentials{Username: info.AuthUsername, Password: workingPassword(deviceCredsList, info.AuthUsername)})
 				}
+
 				info.IP = u.ip
 				info.Port = u.port
 				info.DiscoveredBy = u.discoveredBy
@@ -335,6 +362,23 @@ func logf(format string, args ...any) {
 	if flagVerbose {
 		fmt.Printf(format, args...)
 	}
+}
+
+// quickGetBrandModel does a cheap unauthenticated probe to learn brand+model
+// before committing to the credential list. Returns empty strings on any error.
+func quickGetBrandModel(serviceURL string) (brand, model string) {
+	return onvif.GetBrandModel(serviceURL)
+}
+
+// workingPassword finds the password for a given username in a credential list.
+// Returns empty string if not found.
+func workingPassword(list []onvif.Credentials, username string) string {
+	for _, c := range list {
+		if c.Username == username {
+			return c.Password
+		}
+	}
+	return ""
 }
 
 // buildServiceURL constructs the ONVIF device service URL for a host:port.

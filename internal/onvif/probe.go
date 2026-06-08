@@ -26,6 +26,22 @@ var httpClient = &http.Client{
 	},
 }
 
+// GetBrandModel does a minimal unauthenticated probe (GetCapabilities +
+// GetDeviceInformation) to return the manufacturer and model of an ONVIF
+// device without fetching profiles or stream URIs. Returns empty strings on
+// any error (including auth required).
+func GetBrandModel(serviceURL string) (manufacturer, model string) {
+	_, err := getCapabilities(serviceURL, Credentials{})
+	if err != nil {
+		return "", ""
+	}
+	info := &DeviceInfo{}
+	if err := fillDeviceInfo(serviceURL, Credentials{}, info); err != nil {
+		return "", ""
+	}
+	return info.Manufacturer, info.Model
+}
+
 // ErrAuthRequired is returned by ProbeURL when the device demands credentials.
 var ErrAuthRequired = fmt.Errorf("ONVIF authentication required")
 
