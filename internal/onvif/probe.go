@@ -203,8 +203,23 @@ func fillDeviceInfo(serviceURL string, creds Credentials, info *DeviceInfo) erro
 var (
 	profileBlockRe = regexp.MustCompile(`(?is)<[^>]*:?Profiles[^>]+token="([^"]+)"[^>]*>(.*?)</[^>]*:?Profiles>`)
 	profileNameRe  = xmlTagRe("Name")
+
+	// VideoEncoderConfiguration block within a profile
+	vecBlockRe     = regexp.MustCompile(`(?is)<[^>]*:?VideoEncoderConfiguration[^>]*>(.*?)</[^>]*:?VideoEncoderConfiguration>`)
+	vecEncodingRe  = xmlTagRe("Encoding")
+	vecWidthRe     = xmlTagRe("Width")
+	vecHeightRe    = xmlTagRe("Height")
+	vecFpsRe       = regexp.MustCompile(`(?i)<[^>]*:?(?:FrameRateLimit|FrameRate)[^>]*>(\d+)<`)
+	vecBitrateRe   = regexp.MustCompile(`(?i)<[^>]*:?(?:BitrateLimit|Bitrate)[^>]*>(\d+)<`)
+	vecH264ProfRe  = xmlTagRe("H264Profile")
+
+	// AudioEncoderConfiguration block within a profile
+	aecBlockRe       = regexp.MustCompile(`(?is)<[^>]*:?AudioEncoderConfiguration[^>]*>(.*?)</[^>]*:?AudioEncoderConfiguration>`)
+	aecEncodingRe    = xmlTagRe("Encoding")
+	aecSampleRateRe  = xmlTagRe("SampleRate")
+	aecBitrateRe     = xmlTagRe("Bitrate")
+
 	// Match <Uri> inside a <MediaUri> or <StreamUri> parent, or a bare <Uri> tag.
-	// We look for the Uri that follows the MediaUri/GetStreamUriResponse block.
 	streamURIRe = regexp.MustCompile(`(?i)<[^>]*:?(?:MediaUri|StreamUri|GetStreamUriResponse)[^>]*>[\s\S]*?<[^>]*:?Uri[^>]*>(rtsp://[^<]+)<`)
 	// Fallback: any <Uri> containing rtsp://
 	streamURIFallbackRe = regexp.MustCompile(`(?i)<[^>]*:?Uri[^>]*>(rtsp://[^<]+)<`)
@@ -222,11 +237,32 @@ func fillProfiles(serviceURL string, creds Credentials, info *DeviceInfo) error 
 	matches := profileBlockRe.FindAllStringSubmatch(resp, -1)
 	for _, m := range matches {
 		token := m[1]
-		name := xmlFirst(profileNameRe, m[2])
+		block := m[2]
+		name := xmlFirst(profileNameRe, block)
 		if name == "" {
 			name = token
 		}
 		p := Profile{Name: name, Token: token}
+
+		// Video encoder config
+		if vm := vecBlockRe.FindStringSubmatch(block); vm != nil {
+			vb := vm[1]
+			p.VideoCodec = strings.ToUpper(xmlFirst(vecEncodingRe, vb))
+			p.Width = xmlInt(vecWidthRe, vb)
+			p.Height = xmlInt(vecHeightRe, vb)
+			p.FrameRateFPS = xmlIntRe(vecFpsRe, vb)
+			p.BitRateKbps = xmlIntRe(vecBitrateRe, vb)
+			p.H264Profile = xmlFirst(vecH264ProfRe, vb)
+		}
+
+		// Audio encoder config
+		if am := aecBlockRe.FindStringSubmatch(block); am != nil {
+			ab := am[1]
+			p.AudioCodec = strings.ToUpper(xmlFirst(aecEncodingRe, ab))
+			p.AudioSampleRate = xmlInt(aecSampleRateRe, ab)
+			p.AudioBitRate = xmlInt(aecBitrateRe, ab)
+		}
+
 		p.StreamURI = getStreamURI(serviceURL, creds, token)
 		info.Profiles = append(info.Profiles, p)
 	}
@@ -269,6 +305,28 @@ func xmlFirst(re *regexp.Regexp, s string) string {
 		return ""
 	}
 	return strings.TrimSpace(m[1])
+}
+
+// xmlInt extracts the first integer value matched by re (expects capture group 1).
+func xmlInt(re *regexp.Regexp, s string) int {
+	v := xmlFirst(re, s)
+	if v == "" {
+		return 0
+	}
+	var n int
+	fmt.Sscanf(v, "%d", &n)
+	return n
+}
+
+// xmlIntRe is like xmlInt but the regex already has a \d+ capture group.
+func xmlIntRe(re *regexp.Regexp, s string) int {
+	m := re.FindStringSubmatch(s)
+	if m == nil {
+		return 0
+	}
+	var n int
+	fmt.Sscanf(m[1], "%d", &n)
+	return n
 }
 
 func truncate(s string, n int) string {

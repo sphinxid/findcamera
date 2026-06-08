@@ -221,11 +221,35 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 	close(probeCh)
 
-	var devices []*onvif.DeviceInfo
+	var rawDevices []*onvif.DeviceInfo
 	for range pending {
 		if d := <-devCh; d != nil {
-			devices = append(devices, d)
+			rawDevices = append(rawDevices, d)
 		}
+	}
+
+	// Dedup: same physical device may appear from both wsdiscovery and portscan.
+	// Key by IP + SerialNumber (fall back to IP+Port when serial is absent).
+	// Merge DiscoveredBy so the single row shows both sources when applicable.
+	type dedupKey struct{ ip, serial string }
+	seen2 := make(map[dedupKey]*onvif.DeviceInfo)
+	var devices []*onvif.DeviceInfo
+	for _, d := range rawDevices {
+		serial := d.SerialNumber
+		if serial == "" {
+			serial = fmt.Sprintf("port%d", d.Port)
+		}
+		k := dedupKey{ip: d.IP, serial: serial}
+		if existing, ok := seen2[k]; ok {
+			// Merge discovery sources
+			if existing.DiscoveredBy != d.DiscoveredBy &&
+				!strings.Contains(existing.DiscoveredBy, d.DiscoveredBy) {
+				existing.DiscoveredBy = existing.DiscoveredBy + "+" + d.DiscoveredBy
+			}
+			continue
+		}
+		seen2[k] = d
+		devices = append(devices, d)
 	}
 
 	// Sort by IP then port for stable output
@@ -237,8 +261,7 @@ func run(_ *cobra.Command, _ []string) error {
 	})
 
 	// ── Output ────────────────────────────────────────────────────
-	fmt.Printf("\nFound %d confirmed ONVIF device(s).\n\n", len(devices))
-
+	fmt.Println()
 	switch strings.ToLower(flagOutput) {
 	case "json":
 		path := flagFile + ".json"

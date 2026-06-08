@@ -28,4 +28,17 @@ type Profile struct {
 	Name      string `json:"name"`
 	Token     string `json:"token"`
 	StreamURI string `json:"stream_uri,omitempty"`
+
+	// Video encoding details (from VideoEncoderConfiguration)
+	VideoCodec   string `json:"video_codec,omitempty"`   // H264, H265, MPEG4, JPEG …
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	FrameRateFPS int    `json:"fps,omitempty"`
+	BitRateKbps  int    `json:"bitrate_kbps,omitempty"`
+	H264Profile  string `json:"h264_profile,omitempty"`  // Baseline, Main, High, Extended
+
+	// Audio encoding details (from AudioEncoderConfiguration)
+	AudioCodec     string `json:"audio_codec,omitempty"`  // G711, G726, AAC …
+	AudioSampleRate int   `json:"audio_sample_rate,omitempty"`
+	AudioBitRate   int    `json:"audio_bitrate,omitempty"`
 }
