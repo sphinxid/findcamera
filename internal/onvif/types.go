@@ -9,6 +9,7 @@ type DeviceInfo struct {
 	MediaServiceURL string `json:"media_service_url,omitempty"`
 	DiscoveredBy    string `json:"discovered_by"`           // "wsdiscovery" or "portscan"
 	AuthUsername    string `json:"auth_username,omitempty"` // credential that succeeded (empty = no auth needed)
+	authPassword    string // internal: used for cache; not serialised
 
 	// GetDeviceInformation
 	Manufacturer    string `json:"manufacturer,omitempty"`
@@ -22,6 +23,12 @@ type DeviceInfo struct {
 
 	// Error during probing (if any)
 	ProbeError string `json:"probe_error,omitempty"`
+}
+
+// WorkingCredential returns the credential that successfully authenticated
+// this device. Username will be empty if no authentication was required.
+func (d *DeviceInfo) WorkingCredential() Credentials {
+	return Credentials{Username: d.AuthUsername, Password: d.authPassword}
 }
 
 // Profile represents an ONVIF media profile and its stream URI.

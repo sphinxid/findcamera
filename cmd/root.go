@@ -18,17 +18,18 @@ import (
 
 // CLI flags
 var (
-	flagSubnets    []string
-	flagWorkers    int
-	flagTimeout    int
-	flagOutput     string // "table" (default), "json", "csv", "all"
-	flagFile       string // output file path (without extension when "all")
-	flagUsername   string
-	flagPassword   string
-	flagCredsFile  string // path to credentials CSV
-	flagNoDiscover bool   // skip WS-Discovery
-	flagNoPorts    bool   // skip port scan
-	flagVerbose    bool
+	flagSubnets        []string
+	flagWorkers        int
+	flagTimeout        int
+	flagDiscoverySecs  int    // WS-Discovery wait time in seconds
+	flagOutput         string // "table" (default), "json", "csv", "all"
+	flagFile           string // output file path (without extension when "all")
+	flagUsername       string
+	flagPassword       string
+	flagCredsFile      string // path to credentials CSV
+	flagNoDiscover     bool   // skip WS-Discovery
+	flagNoPorts        bool   // skip port scan
+	flagVerbose        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -73,7 +74,7 @@ func SetVersion(v string) {
 func init() {
 	rootCmd.Flags().StringArrayVarP(&flagSubnets, "subnet", "s", nil,
 		"CIDR subnet(s) to scan, e.g. 192.168.1.0/24 (repeatable)")
-	rootCmd.Flags().IntVarP(&flagWorkers, "workers", "w", 100,
+	rootCmd.Flags().IntVarP(&flagWorkers, "workers", "w", 50,
 		"number of concurrent scan workers")
 	rootCmd.Flags().IntVarP(&flagTimeout, "timeout", "t", 500,
 		"TCP connect timeout per port in milliseconds")
@@ -87,6 +88,8 @@ func init() {
 		"ONVIF password (used together with --username)")
 	rootCmd.Flags().StringVarP(&flagCredsFile, "creds-file", "c", "default.csv",
 		"CSV file with default credentials to try (columns: brand,username,password; use <NULL> for empty password)")
+	rootCmd.Flags().IntVar(&flagDiscoverySecs, "discovery-timeout", 5,
+		"seconds to wait for WS-Discovery responses")
 	rootCmd.Flags().BoolVar(&flagNoDiscover, "no-discovery", false,
 		"skip WS-Discovery multicast probe")
 	rootCmd.Flags().BoolVar(&flagNoPorts, "no-portscan", false,
@@ -157,8 +160,9 @@ func run(_ *cobra.Command, _ []string) error {
 
 	// ── WS-Discovery ──────────────────────────────────────────────
 	if !flagNoDiscover {
-		logf("Running WS-Discovery (waiting 3s for responses)…\n")
-		results, err := scanner.WSDiscovery(3 * time.Second)
+		discoverDur := time.Duration(flagDiscoverySecs) * time.Second
+		logf("Running WS-Discovery (waiting %ds for responses)…\n", flagDiscoverySecs)
+		results, err := scanner.WSDiscovery(discoverDur)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "WS-Discovery error: %v\n", err)
 		}
@@ -265,8 +269,7 @@ func run(_ *cobra.Command, _ []string) error {
 				// Step 3: record the working credential in the cache.
 				if info.AuthUsername != "" {
 					logf("    Authenticated as %q\n", info.AuthUsername)
-					credCache.Put(info.Manufacturer, info.Model,
-						onvif.Credentials{Username: info.AuthUsername, Password: workingPassword(deviceCredsList, info.AuthUsername)})
+					credCache.Put(info.Manufacturer, info.Model, info.WorkingCredential())
 				}
 
 				info.IP = u.ip
@@ -373,17 +376,6 @@ func logf(format string, args ...any) {
 // before committing to the credential list. Returns empty strings on any error.
 func quickGetBrandModel(serviceURL string) (brand, model string) {
 	return onvif.GetBrandModel(serviceURL)
-}
-
-// workingPassword finds the password for a given username in a credential list.
-// Returns empty string if not found.
-func workingPassword(list []onvif.Credentials, username string) string {
-	for _, c := range list {
-		if c.Username == username {
-			return c.Password
-		}
-	}
-	return ""
 }
 
 // buildServiceURL constructs the ONVIF device service URL for a host:port.

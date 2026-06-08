@@ -23,11 +23,11 @@ A CLI tool that scans a local network for ONVIF-capable IP cameras and NVRs.
 - **Automatic credential fallback** — loads `default.csv` and tries each credential in order when a device requires authentication. Credentials that work for a given brand+model are cached and tried first on subsequent devices of the same type.
 - **Deduplication** — devices found by both WS-Discovery and port scan appear as a single row with `Discovered By: wsdiscovery+portscan`.
 - **Flexible output** — grouped device+stream table on screen; optional JSON and/or CSV export.
-- **Configurable concurrency** — `--workers` flag (default 100).
+- **Configurable concurrency** — `--workers` flag (default 50).
 
 ## ONVIF ports scanned
 
-`80`, `443`, `554`, `1935`, `2020`, `5000`, `7001`, `8000`, `8080`, `8081`, `8082`, `8083`, `8086`, `8090`, `8443`, `8554`, `9000`, `10554`, `34567`, `37777`, `49152`
+`80`, `443`, `554`, `1935`, `2020`, `5000`, `7001`, `8000`, `8080`, `8081`, `8082`, `8083`, `8086`, `8090`, `8443`, `8554`, `9000`, `10000`, `10080`, `10554`, `11080`, `18080`, `34567`, `37777`, `49152`
 
 ## Installation
 
@@ -46,13 +46,14 @@ findcamera [--subnet 192.168.1.0/24] [flags]
 
 Flags:
   -s, --subnet stringArray   CIDR subnet(s) to scan, e.g. 192.168.1.0/24 (repeatable)
-  -w, --workers int          concurrent scan workers (default 100)
+  -w, --workers int          concurrent scan workers (default 50)
   -t, --timeout int          TCP connect timeout per port in milliseconds (default 500)
   -o, --output string        output format: table | json | csv | all (default "table")
   -f, --file string          output file path without extension for json/csv/all (default "cameras")
   -c, --creds-file string    credential list CSV to try on protected devices (default "default.csv")
   -u, --username string      explicit ONVIF username — skips default.csv entirely
   -p, --password string      ONVIF password (used with --username)
+      --discovery-timeout    seconds to wait for WS-Discovery responses (default 5)
       --no-discovery         skip WS-Discovery multicast probe
       --no-portscan          skip TCP port scan (WS-Discovery only)
   -v, --verbose              print verbose progress messages

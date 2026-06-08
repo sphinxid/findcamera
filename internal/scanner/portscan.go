@@ -8,24 +8,28 @@ import (
 
 // OnvifPorts is the list of TCP ports commonly used by ONVIF / IP camera devices.
 var OnvifPorts = []int{
-	80,   // HTTP (most cameras)
-	443,  // HTTPS
-	554,  // RTSP
-	1935, // RTMP
-	2020, // Some Hikvision NVRs
-	5000, // Some cameras
-	7001, // Some cameras
-	8000, // Hikvision default
-	8080, // Dahua / generic
+	80,    // HTTP (most cameras)
+	443,   // HTTPS
+	554,   // RTSP
+	1935,  // RTMP
+	2020,  // Some Hikvision NVRs
+	5000,  // Some cameras
+	7001,  // Some cameras
+	8000,  // Hikvision default
+	8080,  // Dahua / generic
 	8081,
 	8082,
 	8083,
 	8086,
 	8090,
-	8443, // HTTPS alternate
-	8554, // RTSP alternate
-	9000, // Some cameras
-	10554,
+	8443,  // HTTPS alternate
+	8554,  // RTSP alternate
+	9000,  // Some cameras
+	10000, // Generic Chinese cameras (e.g. Foscam, Meari, ANKO)
+	10080, // Some OEM cameras
+	11080, // Some OEM cameras
+	18080, // Some OEM cameras
+	10554, // RTSP alternate
 	34567, // Dahua DVR
 	37777, // Dahua NVR
 	49152, // UPnP / generic
@@ -55,13 +59,21 @@ func OpenOnvifPorts(host string, workers int, timeout time.Duration) []int {
 		go func() {
 			for port := range portCh {
 				addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-				conn, err := net.DialTimeout("tcp", addr, timeout)
-				if err == nil {
-					conn.Close()
-					resCh <- result{port: port, open: true}
-				} else {
-					resCh <- result{port: port, open: false}
+				open := false
+				// Retry up to 3 times — some cameras drop connections
+				// when the network is heavily loaded.
+				for attempt := 0; attempt < 3; attempt++ {
+					conn, err := net.DialTimeout("tcp", addr, timeout)
+					if err == nil {
+						conn.Close()
+						open = true
+						break
+					}
+					if attempt < 2 {
+						time.Sleep(time.Duration(150+attempt*150) * time.Millisecond)
+					}
 				}
+				resCh <- result{port: port, open: open}
 			}
 		}()
 	}

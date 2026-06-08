@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -58,6 +59,7 @@ func ProbeURLWithFallback(serviceURL string, credsList []Credentials) (*DeviceIn
 		info, err := ProbeURL(serviceURL, c)
 		if err == nil {
 			info.AuthUsername = c.Username
+			info.authPassword = c.Password
 			return info, nil
 		}
 		if isAuthError(err) {
@@ -88,11 +90,17 @@ func ProbeURL(serviceURL string, creds Credentials) (*DeviceInfo, error) {
 
 	// Step 2: GetDeviceInformation
 	if err := fillDeviceInfo(serviceURL, creds, info); err != nil {
+		if isAuthError(err) {
+			return info, fmt.Errorf("GetDeviceInformation: %w", err)
+		}
 		info.ProbeError = fmt.Sprintf("GetDeviceInformation: %v", err)
 	}
 
 	// Step 3: GetProfiles + GetStreamUri (sent to the media service URL)
 	if err := fillProfiles(mediaURL, creds, info); err != nil {
+		if isAuthError(err) {
+			return info, fmt.Errorf("GetProfiles: %w", err)
+		}
 		if info.ProbeError != "" {
 			info.ProbeError += "; "
 		}
@@ -201,15 +209,19 @@ func isAuthError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if _, ok := err.(errHTTPAuth); ok {
+	// Unwrap to check for the concrete errHTTPAuth sentinel anywhere in the chain.
+	var httpAuth errHTTPAuth
+	if errors.As(err, &httpAuth) {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
 	authKeywords := []string{
+		"401", "403",
 		"notauthorized", "not authorized",
 		"failedauthentication", "failed authentication",
 		"sender not authorized", "authorization",
 		"access denied",
+		"unauthorized",
 	}
 	for _, kw := range authKeywords {
 		if strings.Contains(msg, kw) {
@@ -272,6 +284,9 @@ func fillDeviceInfo(serviceURL string, creds Credentials, info *DeviceInfo) erro
 	if err != nil {
 		return err
 	}
+	if isSoapAuthFault(resp) {
+		return errHTTPAuth{200}
+	}
 	info.Manufacturer = xmlFirst(mfgRe, resp)
 	info.Model = xmlFirst(modelRe, resp)
 	info.FirmwareVersion = xmlFirst(fwRe, resp)
@@ -316,6 +331,9 @@ func fillProfiles(serviceURL string, creds Credentials, info *DeviceInfo) error 
 		body, creds)
 	if err != nil {
 		return err
+	}
+	if isSoapAuthFault(resp) {
+		return errHTTPAuth{200}
 	}
 
 	matches := profileBlockRe.FindAllStringSubmatch(resp, -1)
