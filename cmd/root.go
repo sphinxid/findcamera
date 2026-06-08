@@ -88,7 +88,7 @@ func init() {
 		"ONVIF password (used together with --username)")
 	rootCmd.Flags().StringVarP(&flagCredsFile, "creds-file", "c", "default.csv",
 		"CSV file with default credentials to try (columns: brand,username,password; use <NULL> for empty password)")
-	rootCmd.Flags().IntVar(&flagDiscoverySecs, "discovery-timeout", 5,
+	rootCmd.Flags().IntVar(&flagDiscoverySecs, "discovery-timeout", 30,
 		"seconds to wait for WS-Discovery responses")
 	rootCmd.Flags().BoolVar(&flagNoDiscover, "no-discovery", false,
 		"skip WS-Discovery multicast probe")

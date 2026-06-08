@@ -53,7 +53,7 @@ Flags:
   -c, --creds-file string    credential list CSV to try on protected devices (default "default.csv")
   -u, --username string      explicit ONVIF username — skips default.csv entirely
   -p, --password string      ONVIF password (used with --username)
-      --discovery-timeout    seconds to wait for WS-Discovery responses (default 5)
+      --discovery-timeout    seconds to wait for WS-Discovery responses (default 30)
       --no-discovery         skip WS-Discovery multicast probe
       --no-portscan          skip TCP port scan (WS-Discovery only)
   -v, --verbose              print verbose progress messages
