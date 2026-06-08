@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/firman/findcamera/internal/creds"
-	"github.com/firman/findcamera/internal/onvif"
-	"github.com/firman/findcamera/internal/output"
-	"github.com/firman/findcamera/internal/scanner"
+	"github.com/sphinxid/findcamera/internal/creds"
+	"github.com/sphinxid/findcamera/internal/onvif"
+	"github.com/sphinxid/findcamera/internal/output"
+	"github.com/sphinxid/findcamera/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
@@ -63,6 +63,11 @@ as JSON and/or CSV.`,
 // Execute is the entry point called from main.
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+// SetVersion injects the build-time version string into the root command.
+func SetVersion(v string) {
+	rootCmd.Version = v
 }
 
 func init() {

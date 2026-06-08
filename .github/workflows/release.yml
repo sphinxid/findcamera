@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+
+          GOOS=linux   GOARCH=amd64  go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o dist/findcamera-linux-amd64       .
+          GOOS=linux   GOARCH=arm64  go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o dist/findcamera-linux-arm64       .
+          GOOS=windows GOARCH=amd64  go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o dist/findcamera-windows-amd64.exe .
+          GOOS=darwin  GOARCH=amd64  go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o dist/findcamera-darwin-amd64      .
+          GOOS=darwin  GOARCH=arm64  go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o dist/findcamera-darwin-arm64      .
+
+      - name: Package archives
+        run: |
+          cd dist
+
+          # Linux amd64
+          tar czf findcamera-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz \
+            findcamera-linux-amd64 \
+            -C .. default.csv README.md
+
+          # Linux arm64
+          tar czf findcamera-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz \
+            findcamera-linux-arm64 \
+            -C .. default.csv README.md
+
+          # macOS amd64
+          tar czf findcamera-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz \
+            findcamera-darwin-amd64 \
+            -C .. default.csv README.md
+
+          # macOS arm64 (Apple Silicon)
+          tar czf findcamera-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz \
+            findcamera-darwin-arm64 \
+            -C .. default.csv README.md
+
+          # Windows amd64 (zip)
+          zip findcamera-${{ steps.version.outputs.VERSION }}-windows-amd64.zip \
+            findcamera-windows-amd64.exe \
+            -j ../default.csv ../README.md
+
+          cd ..
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum findcamera-${{ steps.version.outputs.VERSION }}-*.tar.gz \
+                    findcamera-${{ steps.version.outputs.VERSION }}-*.zip \
+            > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "findcamera ${{ steps.version.outputs.VERSION }}"
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          generate_release_notes: true
+          files: |
+            dist/findcamera-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+            dist/findcamera-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
+            dist/findcamera-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz
+            dist/findcamera-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz
+            dist/findcamera-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
+            dist/checksums.txt
