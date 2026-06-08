@@ -1,0 +1,107 @@
+brand,username,password
+ACTi,admin,123456
+ACTi,Admin,123456
+Amcrest,admin,admin
+American Dynamics,admin,admin
+American Dynamics,admin,9999
+ANKO,root,anko
+Arecont Vision,admin,admin
+Arecont Vision,admin,<NULL>
+AvertX,admin,1234
+Avigilon,admin,admin
+Avigilon,Administrator,<NULL>
+Axis Communications,root,pass
+Axis Communications,root,password
+Basler,admin,admin
+Bosch,service,service
+Bosch,root,<NULL>
+Brickcom,admin,admin
+Canon,root,camera
+Cisco,admin,admin
+Cisco,admin,<NULL>
+CP Plus,admin,password
+CP Plus,admin,admin
+Dahua,admin,admin
+Dahua,admin,888888
+Dahua,admin,666666
+Dahua,888888,888888
+Dahua,666666,666666
+Dahua,root,vizxv
+Dahua,root,888888
+Dahua,root,666666
+Dahua,root,7ujMko0vizxv
+Dahua,root,7ujMko0admin
+Digital Watchdog,admin,admin
+D-Link,admin,<NULL>
+DRS,admin,1234
+DVTel,Admin,1234
+DVTel,admin,1234
+DynaColor,Admin,1234
+DynaColor,admin,1234
+FLIR,admin,fliradmin
+FLIR,admin,admin
+Foscam,admin,<NULL>
+GeoVision,admin,admin
+Grandstream,admin,admin
+Hanwha,admin,<NULL>
+Hikvision,admin,12345
+Honeywell,admin,1234
+Honeywell,administrator,1234
+IndigoVision (BX/GX),Admin,1234
+IndigoVision (Ultra),admin,<NULL>
+Intellio,admin,admin
+Interlogix,admin,1234
+IQinVision,root,system
+IPX-DDK,root,admin
+IPX-DDK,root,Admin
+JVC,admin,jvc
+Lilin,admin,admin
+Lilin,admin,1111
+Lilin,admin,pass
+Longse,admin,12345
+Lorex,admin,admin
+LTS,admin,12345
+March Networks,admin,<NULL>
+Mikrotik,root,root
+Mobotix,admin,meinsm
+Northern,admin,12345
+Oncam,admin,admin
+Panasonic,admin,12345
+Panasonic,admin1,password
+Panasonic,<NULL>,<NULL>
+Pelco,admin,admin
+Pelco,admin,123456
+Pixord,admin,admin
+Q-See,admin,admin
+Q-See,admin,123456
+Reolink,admin,<NULL>
+RVi,admin,admin
+Samsung Electronics,root,root
+Samsung Electronics,admin,4321
+Samsung Techwin (old),admin,1111111
+Samsung (new),admin,4321
+Sanyo,admin,admin
+Scallop,admin,password
+Sentry360 (mini),admin,1234
+Sentry360 (pro),admin,<NULL>
+Sony,admin,admin
+Speco,admin,1234
+Stardot,admin,admin
+Starvedia,admin,<NULL>
+Sunell,admin,admin
+SV3C,admin,123456
+Swann,admin,12345
+Toshiba,root,ikwd
+Toshiba,root,ikwb
+Trendnet,admin,admin
+Tuya / Smart Life OEM,admin,admin
+Tuya / Smart Life OEM,admin,<NULL>
+Ubiquiti,ubnt,ubnt
+Uniview,admin,123456
+VideoIQ,supervisor,supervisor
+Vivotek,root,<NULL>
+Vivotek,admin,admin
+Vivotek,admin,<NULL>
+W-Box (Hikvision OEM old),admin,wbox123
+W-Box (Sunell OEM new),admin,admin
+Wodsee,admin,<NULL>

@@ -1,3 +1,4 @@
 findcamera
 *.json
 *.csv
+!default.csv

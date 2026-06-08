@@ -64,13 +64,17 @@ func parseCSV(r io.Reader) ([]Entry, error) {
 				continue
 			}
 		}
-		pass := rec[2]
-		if strings.EqualFold(strings.TrimSpace(pass), nullPassword) {
+		user := strings.TrimSpace(rec[1])
+		if strings.EqualFold(user, nullPassword) {
+			user = ""
+		}
+		pass := strings.TrimSpace(rec[2])
+		if strings.EqualFold(pass, nullPassword) {
 			pass = ""
 		}
 		entries = append(entries, Entry{
 			Brand:    strings.TrimSpace(rec[0]),
-			Username: strings.TrimSpace(rec[1]),
+			Username: user,
 			Password: pass,
 		})
 	}
