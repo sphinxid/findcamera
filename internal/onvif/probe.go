@@ -26,6 +26,32 @@ var httpClient = &http.Client{
 	},
 }
 
+// ErrAuthRequired is returned by ProbeURL when the device demands credentials.
+var ErrAuthRequired = fmt.Errorf("ONVIF authentication required")
+
+// ProbeURLWithFallback tries each credential in the list in order.
+// It first calls ProbeURL with the supplied cred; if the device returns an
+// auth error it moves to the next entry. The first successful result is
+// returned. If every credential fails with an auth error, ErrAuthRequired
+// is returned. Other errors (network, not-ONVIF) abort immediately.
+func ProbeURLWithFallback(serviceURL string, credsList []Credentials) (*DeviceInfo, error) {
+	if len(credsList) == 0 {
+		credsList = []Credentials{{}}
+	}
+	for _, c := range credsList {
+		info, err := ProbeURL(serviceURL, c)
+		if err == nil {
+			info.AuthUsername = c.Username
+			return info, nil
+		}
+		if isAuthError(err) {
+			continue // try next credential
+		}
+		return nil, err // not an auth problem — surface the error
+	}
+	return nil, ErrAuthRequired
+}
+
 // ProbeURL attempts to identify and interrogate an ONVIF device at the given
 // service URL. It returns a (possibly partial) DeviceInfo even when errors
 // occur (ProbeError will be set).
@@ -110,33 +136,71 @@ func wssecHeader(username, password string) string {
   </wsse:Security>`, username, digest, nonce64, created)
 }
 
+// errHTTPAuth is a sentinel wrapping an HTTP 401/403 status.
+type errHTTPAuth struct{ code int }
+
+func (e errHTTPAuth) Error() string { return fmt.Sprintf("HTTP %d Unauthorized", e.code) }
+
 func soapPost(url, action, body string, creds Credentials) (string, error) {
 	env := soapEnvelope(body, creds)
-	req, err := http.NewRequest("POST", url, bytes.NewBufferString(env))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", `application/soap+xml; charset=utf-8; action="`+action+`"`)
-	req.Header.Set("User-Agent", "findcamera/1.0")
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		// Some cameras use HTTP/1.1 text/xml content-type — retry with that
-		req2, _ := http.NewRequest("POST", url, bytes.NewBufferString(env))
-		req2.Header.Set("Content-Type", "text/xml; charset=utf-8")
-		req2.Header.Set("SOAPAction", `"`+action+`"`)
-		req2.Header.Set("User-Agent", "findcamera/1.0")
-		resp2, err2 := httpClient.Do(req2)
-		if err2 != nil {
-			return "", err // return original error
+	do := func(contentType, soapActionHeader string) (string, error) {
+		req, err := http.NewRequest("POST", url, bytes.NewBufferString(env))
+		if err != nil {
+			return "", err
 		}
-		defer resp2.Body.Close()
-		data, _ := io.ReadAll(resp2.Body)
+		req.Header.Set("Content-Type", contentType)
+		if soapActionHeader != "" {
+			req.Header.Set("SOAPAction", soapActionHeader)
+		}
+		req.Header.Set("User-Agent", "findcamera/1.0")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		// Treat 401/403 as explicit auth errors
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return "", errHTTPAuth{resp.StatusCode}
+		}
 		return string(data), nil
 	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-	return string(data), nil
+
+	// Try SOAP 1.2 first
+	result, err := do(`application/soap+xml; charset=utf-8; action="`+action+`"`, "")
+	if err != nil {
+		// On connection/protocol error (not auth), retry with SOAP 1.1
+		if _, isAuth := err.(errHTTPAuth); !isAuth {
+			result, err = do("text/xml; charset=utf-8", `"`+action+`"`)
+		}
+	}
+	return result, err
+}
+
+// isAuthError returns true if err represents an ONVIF authentication failure
+// (HTTP 401/403 or a SOAP NotAuthorized / wsse:FailedAuthentication fault).
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if _, ok := err.(errHTTPAuth); ok {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	authKeywords := []string{
+		"notauthorized", "not authorized",
+		"failedauthentication", "failed authentication",
+		"sender not authorized", "authorization",
+		"access denied",
+	}
+	for _, kw := range authKeywords {
+		if strings.Contains(msg, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 // ------------------------------------------------------------------
@@ -154,6 +218,10 @@ func getCapabilities(serviceURL string, creds Credentials) (mediaURL string, err
 		body, creds)
 	if err != nil {
 		return "", err
+	}
+	// SOAP fault auth errors come back as HTTP 200 with a Fault body
+	if isSoapAuthFault(resp) {
+		return "", errHTTPAuth{200}
 	}
 	if !strings.Contains(resp, "Capabilities") {
 		return "", fmt.Errorf("unexpected response (not ONVIF?): %q", truncate(resp, 200))
@@ -327,6 +395,25 @@ func xmlIntRe(re *regexp.Regexp, s string) int {
 	var n int
 	fmt.Sscanf(m[1], "%d", &n)
 	return n
+}
+
+// isSoapAuthFault detects SOAP 200 responses that carry an authentication fault.
+func isSoapAuthFault(body string) bool {
+	lower := strings.ToLower(body)
+	authFaultTokens := []string{
+		"notauthorized",
+		"failedauthentication",
+		"sender not authorized",
+		"wsse:failedauthentication",
+		"ter:notauthorized",
+	}
+	hasFault := strings.Contains(lower, "fault")
+	for _, tok := range authFaultTokens {
+		if strings.Contains(lower, tok) && hasFault {
+			return true
+		}
+	}
+	return false
 }
 
 func truncate(s string, n int) string {

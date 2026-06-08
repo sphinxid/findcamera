@@ -7,7 +7,8 @@ type DeviceInfo struct {
 	Port            int    `json:"port"`
 	ServiceURL      string `json:"service_url"`
 	MediaServiceURL string `json:"media_service_url,omitempty"`
-	DiscoveredBy    string `json:"discovered_by"` // "wsdiscovery" or "portscan"
+	DiscoveredBy    string `json:"discovered_by"`           // "wsdiscovery" or "portscan"
+	AuthUsername    string `json:"auth_username,omitempty"` // credential that succeeded (empty = no auth needed)
 
 	// GetDeviceInformation
 	Manufacturer    string `json:"manufacturer,omitempty"`

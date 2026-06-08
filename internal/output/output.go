@@ -45,6 +45,11 @@ func PrintTable(devices []*onvif.DeviceInfo) {
 			fmt.Fprintf(dw, "    Serial:\t%s\n", d.SerialNumber)
 		}
 		fmt.Fprintf(dw, "    Discovered by:\t%s\n", d.DiscoveredBy)
+		if d.AuthUsername != "" {
+			fmt.Fprintf(dw, "    Auth (username):\t%s\n", d.AuthUsername)
+		} else {
+			fmt.Fprintf(dw, "    Auth:\t(none required)\n")
+		}
 		fmt.Fprintf(dw, "    Service URL:\t%s\n", d.ServiceURL)
 		if d.MediaServiceURL != "" && d.MediaServiceURL != d.ServiceURL {
 			fmt.Fprintf(dw, "    Media URL:\t%s\n", d.MediaServiceURL)
@@ -135,7 +140,7 @@ func encodeCSV(w io.Writer, devices []*onvif.DeviceInfo) error {
 	cw := csv.NewWriter(w)
 
 	header := []string{
-		"ip", "port", "service_url", "media_service_url", "discovered_by",
+		"ip", "port", "service_url", "media_service_url", "discovered_by", "auth_username",
 		"manufacturer", "model", "firmware_version", "serial_number", "hardware_id",
 		"profile_name", "profile_token", "stream_uri",
 		"video_codec", "h264_profile", "width", "height", "fps", "bitrate_kbps",
@@ -184,6 +189,7 @@ func deviceBaseRow(d *onvif.DeviceInfo) []string {
 		d.ServiceURL,
 		d.MediaServiceURL,
 		d.DiscoveredBy,
+		d.AuthUsername,
 		d.Manufacturer,
 		d.Model,
 		d.FirmwareVersion,

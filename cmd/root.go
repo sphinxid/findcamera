@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/firman/findcamera/internal/creds"
 	"github.com/firman/findcamera/internal/onvif"
 	"github.com/firman/findcamera/internal/output"
 	"github.com/firman/findcamera/internal/scanner"
@@ -24,8 +25,9 @@ var (
 	flagFile       string // output file path (without extension when "all")
 	flagUsername   string
 	flagPassword   string
-	flagNoDiscover bool // skip WS-Discovery
-	flagNoPorts    bool // skip port scan
+	flagCredsFile  string // path to credentials CSV
+	flagNoDiscover bool   // skip WS-Discovery
+	flagNoPorts    bool   // skip port scan
 	flagVerbose    bool
 )
 
@@ -75,9 +77,11 @@ func init() {
 	rootCmd.Flags().StringVarP(&flagFile, "file", "f", "cameras",
 		"output file path (without extension) for json/csv/all formats")
 	rootCmd.Flags().StringVarP(&flagUsername, "username", "u", "",
-		"ONVIF username (optional, for authenticated devices)")
+		"ONVIF username (overrides credential list)")
 	rootCmd.Flags().StringVarP(&flagPassword, "password", "p", "",
-		"ONVIF password (optional)")
+		"ONVIF password (used together with --username)")
+	rootCmd.Flags().StringVarP(&flagCredsFile, "creds-file", "c", "default.csv",
+		"CSV file with default credentials to try (columns: brand,username,password; use <NULL> for empty password)")
 	rootCmd.Flags().BoolVar(&flagNoDiscover, "no-discovery", false,
 		"skip WS-Discovery multicast probe")
 	rootCmd.Flags().BoolVar(&flagNoPorts, "no-portscan", false,
@@ -98,10 +102,29 @@ func run(_ *cobra.Command, _ []string) error {
 		flagNoPorts = true
 	}
 
-	creds := onvif.Credentials{
-		Username: flagUsername,
-		Password: flagPassword,
+	// Build the credential list to try for authenticated devices.
+	// If --username is given explicitly, only use that single credential.
+	// Otherwise load the CSV file (silently skip if missing).
+	var credsList []onvif.Credentials
+	if flagUsername != "" {
+		credsList = []onvif.Credentials{
+			{Username: "", Password: ""},             // try open first
+			{Username: flagUsername, Password: flagPassword},
+		}
+	} else {
+		entries, err := creds.LoadCSV(flagCredsFile)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Warning: could not load creds file %q: %v\n", flagCredsFile, err)
+			} else {
+				logf("Creds file %q not found; will probe without authentication.\n", flagCredsFile)
+			}
+		} else {
+			logf("Loaded %d credential(s) from %s.\n", len(entries), flagCredsFile)
+		}
+		credsList = creds.ToCredsList(entries)
 	}
+
 	timeout := time.Duration(flagTimeout) * time.Millisecond
 
 	// serviceURLs collected from both discovery methods; deduplicated.
@@ -201,12 +224,18 @@ func run(_ *cobra.Command, _ []string) error {
 		go func() {
 			for u := range probeCh {
 				logf("  Probing %s …\n", u.url)
-				info, err := onvif.ProbeURL(u.url, creds)
+				info, err := onvif.ProbeURLWithFallback(u.url, credsList)
 				if err != nil {
-					// Not confirmed as ONVIF — skip silently (or verbose)
-					logf("    Not ONVIF (or error): %v\n", err)
+					if err == onvif.ErrAuthRequired {
+						logf("    Auth required but no credential matched: %s\n", u.url)
+					} else {
+						logf("    Not ONVIF (or error): %v\n", err)
+					}
 					devCh <- nil
 					continue
+				}
+				if info.AuthUsername != "" {
+					logf("    Authenticated as %q\n", info.AuthUsername)
 				}
 				info.IP = u.ip
 				info.Port = u.port
