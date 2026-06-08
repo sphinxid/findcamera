@@ -3,10 +3,11 @@ package onvif
 // DeviceInfo holds information retrieved from an ONVIF device.
 type DeviceInfo struct {
 	// Connection
-	IP          string `json:"ip"`
-	Port        int    `json:"port"`
-	ServiceURL  string `json:"service_url"`
-	DiscoveredBy string `json:"discovered_by"` // "wsdiscovery" or "portscan"
+	IP              string `json:"ip"`
+	Port            int    `json:"port"`
+	ServiceURL      string `json:"service_url"`
+	MediaServiceURL string `json:"media_service_url,omitempty"`
+	DiscoveredBy    string `json:"discovered_by"` // "wsdiscovery" or "portscan"
 
 	// GetDeviceInformation
 	Manufacturer    string `json:"manufacturer,omitempty"`

@@ -32,20 +32,25 @@ var httpClient = &http.Client{
 func ProbeURL(serviceURL string, creds Credentials) (*DeviceInfo, error) {
 	info := &DeviceInfo{ServiceURL: serviceURL}
 
-	// Step 1: GetCapabilities to confirm it's an ONVIF device
-	caps, err := getCapabilities(serviceURL, creds)
+	// Step 1: GetCapabilities to confirm it's an ONVIF device and get the
+	// media service URL (may differ from the device service URL).
+	mediaURL, err := getCapabilities(serviceURL, creds)
 	if err != nil {
 		return info, fmt.Errorf("GetCapabilities: %w", err)
 	}
-	_ = caps
+	// Fall back to the device service URL if no separate media XAddr was found.
+	if mediaURL == "" {
+		mediaURL = serviceURL
+	}
+	info.MediaServiceURL = mediaURL
 
 	// Step 2: GetDeviceInformation
 	if err := fillDeviceInfo(serviceURL, creds, info); err != nil {
 		info.ProbeError = fmt.Sprintf("GetDeviceInformation: %v", err)
 	}
 
-	// Step 3: GetProfiles + GetStreamUri
-	if err := fillProfiles(serviceURL, creds, info); err != nil {
+	// Step 3: GetProfiles + GetStreamUri (sent to the media service URL)
+	if err := fillProfiles(mediaURL, creds, info); err != nil {
 		if info.ProbeError != "" {
 			info.ProbeError += "; "
 		}
@@ -138,7 +143,11 @@ func soapPost(url, action, body string, creds Credentials) (string, error) {
 // GetCapabilities
 // ------------------------------------------------------------------
 
-func getCapabilities(serviceURL string, creds Credentials) (string, error) {
+var mediaXAddrRe = regexp.MustCompile(`(?i)<[^>]*:?Media[^>]*>\s*<[^>]*:?XAddr[^>]*>([^<]+)<`)
+
+// getCapabilities confirms the device is ONVIF and returns the media service
+// XAddr (may be empty if not found in the response).
+func getCapabilities(serviceURL string, creds Credentials) (mediaURL string, err error) {
 	body := `<tds:GetCapabilities><tds:Category>All</tds:Category></tds:GetCapabilities>`
 	resp, err := soapPost(serviceURL,
 		"http://www.onvif.org/ver10/device/wsdl/GetCapabilities",
@@ -149,7 +158,10 @@ func getCapabilities(serviceURL string, creds Credentials) (string, error) {
 	if !strings.Contains(resp, "Capabilities") {
 		return "", fmt.Errorf("unexpected response (not ONVIF?): %q", truncate(resp, 200))
 	}
-	return resp, nil
+	if m := mediaXAddrRe.FindStringSubmatch(resp); m != nil {
+		mediaURL = strings.TrimSpace(m[1])
+	}
+	return mediaURL, nil
 }
 
 // ------------------------------------------------------------------
@@ -191,7 +203,11 @@ func fillDeviceInfo(serviceURL string, creds Credentials, info *DeviceInfo) erro
 var (
 	profileBlockRe = regexp.MustCompile(`(?is)<[^>]*:?Profiles[^>]+token="([^"]+)"[^>]*>(.*?)</[^>]*:?Profiles>`)
 	profileNameRe  = xmlTagRe("Name")
-	streamURIRe    = xmlTagRe("Uri")
+	// Match <Uri> inside a <MediaUri> or <StreamUri> parent, or a bare <Uri> tag.
+	// We look for the Uri that follows the MediaUri/GetStreamUriResponse block.
+	streamURIRe = regexp.MustCompile(`(?i)<[^>]*:?(?:MediaUri|StreamUri|GetStreamUriResponse)[^>]*>[\s\S]*?<[^>]*:?Uri[^>]*>(rtsp://[^<]+)<`)
+	// Fallback: any <Uri> containing rtsp://
+	streamURIFallbackRe = regexp.MustCompile(`(?i)<[^>]*:?Uri[^>]*>(rtsp://[^<]+)<`)
 )
 
 func fillProfiles(serviceURL string, creds Credentials, info *DeviceInfo) error {
@@ -232,7 +248,15 @@ func getStreamURI(serviceURL string, creds Credentials, token string) string {
 	if err != nil {
 		return ""
 	}
-	return xmlFirst(streamURIRe, resp)
+	// Try precise match first (Uri inside MediaUri/StreamUri block)
+	if uri := xmlFirst(streamURIRe, resp); uri != "" {
+		return strings.TrimSpace(uri)
+	}
+	// Fall back to any rtsp:// URI in the response
+	if uri := xmlFirst(streamURIFallbackRe, resp); uri != "" {
+		return strings.TrimSpace(uri)
+	}
+	return ""
 }
 
 // ------------------------------------------------------------------

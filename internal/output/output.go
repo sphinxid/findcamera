@@ -12,19 +12,20 @@ import (
 	"github.com/firman/findcamera/internal/onvif"
 )
 
-// PrintTable renders a summary table of discovered devices to stdout.
+// PrintTable renders a summary table of discovered devices to stdout,
+// followed by a dedicated RTSP stream URI section.
 func PrintTable(devices []*onvif.DeviceInfo) {
 	if len(devices) == 0 {
 		fmt.Println("No ONVIF devices found.")
 		return
 	}
 
+	// --- Device summary table ---
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "#\tIP\tPort\tManufacturer\tModel\tFirmware\tSerial\tProfiles\tDiscovered By\tService URL")
+	fmt.Fprintln(w, "#\tIP\tPort\tManufacturer\tModel\tFirmware\tSerial\tDiscovered By\tService URL")
 	fmt.Fprintln(w, strings.Repeat("-", 120))
-
 	for i, d := range devices {
-		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			i+1,
 			d.IP,
 			d.Port,
@@ -32,25 +33,33 @@ func PrintTable(devices []*onvif.DeviceInfo) {
 			d.Model,
 			d.FirmwareVersion,
 			d.SerialNumber,
-			profileSummary(d.Profiles),
 			d.DiscoveredBy,
 			d.ServiceURL,
 		)
 	}
 	w.Flush()
 
-	// Print stream URIs below the table for readability
+	// --- RTSP stream URIs ---
+	fmt.Println()
+	fmt.Println("RTSP Stream URIs:")
+	fmt.Println(strings.Repeat("-", 80))
 	anyStreams := false
+	sw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(sw, "IP\tProfile\tRTSP URI")
 	for _, d := range devices {
 		for _, p := range d.Profiles {
-			if p.StreamURI != "" {
-				if !anyStreams {
-					fmt.Println("\nStream URIs:")
-					anyStreams = true
-				}
-				fmt.Printf("  [%s] %s  ->  %s\n", d.IP, p.Name, p.StreamURI)
+			uri := p.StreamURI
+			if uri == "" {
+				uri = "(not available)"
 			}
+			fmt.Fprintf(sw, "%s\t%s\t%s\n", d.IP, p.Name, uri)
+			anyStreams = true
 		}
+	}
+	if anyStreams {
+		sw.Flush()
+	} else {
+		fmt.Println("  (no profiles or stream URIs retrieved)")
 	}
 }
 
